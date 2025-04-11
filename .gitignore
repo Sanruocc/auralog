@@ -1,0 +1,118 @@
+# Flutter/Dart/Pub related
+.dart_tool/
+.packages
+.pub/
+build/
+flutter_*.png
+generated_plugin_registrant.*
+driftdb_temp/
+
+# Environment files
+.env
+
+# IDEs and editors
+.idea/
+.vscode/
+*.iml
+
+# VS Code settings
+.vscode/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Xcode related
+*.xcworkspace
+*.xcuserstate
+*.xcuserdatad
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+*.xcuserstate
+*.xcscmblueprint
+
+# Android related
+*.jks
+*.keystore
+*.gradle
+*.apk
+*.ap_
+*.dex
+*.class
+*.jar
+*.war
+*.ear
+*.iml
+.gradle/
+local.properties
+android/key.properties
+
+# iOS related
+Pods/
+Podfile.lock
+Flutter/Flutter.framework
+Flutter/Flutter.podspec
+Flutter/Generated.xcconfig
+Flutter/ephemeral/
+Flutter/App.framework
+Flutter/Flutter.podspec
+Flutter/GeneratedPluginRegistrant.*
+Flutter/ephemeral/
+Flutter/Flutter.framework
+Flutter/Flutter.podspec
+Flutter/Generated.xcconfig
+Flutter/ephemeral/
+Flutter/App.framework
+Flutter/Flutter.podspec
+Flutter/GeneratedPluginRegistrant.*
+Flutter/ephemeral/
+Flutter/Flutter.framework
+Flutter/Flutter.podspec
+Flutter/Generated.xcconfig
+Flutter/ephemeral/
+Flutter/App.framework
+Flutter/Flutter.podspec
+Flutter/GeneratedPluginRegistrant.*
+
+# macOS related
+macos/Flutter/ephemeral/
+macos/Flutter/GeneratedPluginRegistrant.swift
+
+# Linux related
+linux/flutter/ephemeral/
+linux/flutter/generated_plugin_registrant.*
+
+# Windows related
+windows/flutter/ephemeral/
+windows/flutter/generated_plugin_registrant.*
+
+# Web related
+web/.dart_tool/
+web/build/
+
+# Symbolication
+app.*.symbols
+
+# Coverage
+coverage/
+
+# Packages
+pubspec.lock
+
+# Miscellaneous
+*.log
+*.tmp
+*.swp
+*.swo
+*.DS_Store
+*.lock
+
+# Exceptions
+!pubspec.lock
+
+# Uncomment below if you want to ignore test outputs
+# test/output/

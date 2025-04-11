@@ -1,0 +1,268 @@
+Project Document: "AuraLog" - AI Journaling App Development Plan
+1. Introduction & Vision
+
+Project Name: AuraLog
+
+Vision: To create a modern, intuitive, and secure Android-only personal journaling application that leverages AI to help users reflect on their thoughts and emotions, track their mood, and gain insights for improved mental well-being.
+
+Core Concept: AuraLog will serve as a personal mental health companion, offering a safe space for daily reflection enhanced by AI-driven sentiment analysis and personalized prompts, built natively for Android using Flutter and Supabase.
+
+Inspiration: Based on the successful concepts and user needs identified in the research for Reflectly AI, tailored specifically for the Android platform and ecosystem.
+2. Goals & Objectives
+
+Primary Goal: Develop and launch a comprehensive, stable, secure, and user-friendly AI journaling app on the Google Play Store.
+
+Key Development Objectives (Sequential):
+
+    Phase 1: Implement foundational journaling features (CRUD), mood tracking, basic AI sentiment analysis, secure authentication and data storage (Supabase), core offline capabilities, and the initial UI adhering to the design language.
+
+    Phase 2: Introduce advanced AI capabilities (smart summaries, personalized insights), integrate multimedia support, develop enhanced mood visualizations and statistics, add habit tracking and refine offline logic.
+
+3. Target Audience
+
+    Individuals seeking self-reflection and emotional awareness tools.
+
+    Users new to journaling looking for a guided, easy-to-use experience.
+
+    People managing stress, anxiety, or seeking mood improvement.
+
+    Android users specifically looking for a native, well-designed wellness app.
+
+    Users interested in how AI can enhance their self-understanding journey.
+
+4. Core Features (Phased Development)
+
+(See Section 7 for detailed task breakdown per phase)
+
+Phase 1 (Foundational Features):
+
+    Secure User Authentication (Email/Password)
+
+    Journal Entry Management (Create, Read, View List, Edit, Delete)
+
+    Daily Mood Tracking (Emoji scale or slider)
+
+    Basic Mood Calendar View
+
+    Offline Data Caching (for entries and moods)
+
+    Cloud Sync with Supabase
+
+    Basic AI Sentiment Analysis (Positive/Negative/Neutral tag per entry via Gemini 2.0 Flash API)
+
+    Static Daily Prompts/Questions
+
+    Basic Settings Screen (Account management, Logout)
+
+    Data Encryption (at rest in Supabase, in transit TLS)
+
+Phase 2 (Advanced Features & AI Integration):
+
+    AI Smart Summaries (per entry, weekly/monthly via Gemini 2.0 Flash API)
+
+    AI Personalized Insights & Affirmations (based on sentiment/keywords via Gemini 2.0 Flash API)
+
+    Multimedia Attachments (Photos, Voice Notes - stored in Supabase Storage)
+
+    Advanced Mood Visualization (Graphs, trend analysis)
+
+    Habit Tracker Module
+
+    Enhanced Offline Mode Logic
+
+    Personalized/Dynamic Prompts
+
+    Journaling Guides/Content Library
+
+    Refined UI/UX based on user feedback
+
+5. Design Language & UI/UX Guidelines
+
+Overall Feel: Modern, sleek, calming, encouraging, trustworthy, intuitive.
+
+Color Palette:
+
+    Primary: Gradients transitioning from light blue (#A1C4FD) to light green (#C2E9FB) or similar calming tones. Use gradients subtly in backgrounds, headers, or key visual elements.
+
+    Secondary: Clean whites (#FFFFFF) and light grays (#F5F5F5, #E0E0E0) for backgrounds, cards, and text fields.
+
+    Text: Dark grey or near-black (#424242 or #212121) for high readability. Use lighter grays for secondary text.
+
+    Accent: A soft, warm color like coral (#FFAB91) or a gentle yellow (#FFECB3) for primary buttons (CTAs), highlights, or mood indicators, used sparingly.
+
+Typography:
+
+    Font: Choose a clean, modern, readable sans-serif font available via Google Fonts (e.g., Nunito Sans, Inter, Poppins).
+
+    Hierarchy: Clear distinction between headings, subheadings, body text, and captions using font weight, size, and color.
+
+Layout & Structure:
+
+    Navigation: Use Android's standard Bottom Navigation Bar for main sections (e.g., Journal Feed, Mood Calendar, Stats, Settings).
+
+    Spacing: Generous use of white space for a clean, uncluttered look. Consistent padding and margins.
+
+    Components: Card-based design for journal entries, prompts, and insights. Use standard Material Design components (Buttons, TextFields, Dialogs) customized to the theme.
+
+    Input: Intuitive mood selection (well-designed emoji picker or slider). Clear text areas for journaling.
+
+Visuals:
+
+    Gradients: Apply smoothly and subtly. Avoid harsh transitions.
+
+    Icons: Use a consistent, clean icon set (e.g., Material Icons or a custom set matching the sleek style).
+
+    Imagery: Minimal use of illustrations; if used, they should be abstract, calming, and match the color palette.
+
+    Micro-interactions: Subtle animations on button presses, screen transitions, or loading states to enhance the sleek feel without being distracting.
+
+Android Specifics:
+
+    Adhere to Material Design 3 guidelines where appropriate, adapting them to the custom theme.
+
+    Ensure responsiveness across different Android screen sizes and densities.
+
+    Utilize native Android features like the share sheet, notifications correctly.
+
+    Optimize touch targets and navigation patterns for mobile use.
+
+6. Technology Stack
+
+    Frontend Framework: Flutter (Latest Stable Version)
+
+    State Management: Riverpod
+
+    Navigation: GoRouter
+
+    Backend: Supabase
+
+        Database: Supabase Postgres
+
+        Authentication: Supabase Auth (Email/Password)
+
+        Storage: Supabase Storage
+
+    Local Storage: drift or sqflite
+
+    AI Integration: Direct API calls to Google Gemini 2.0 Flash via http or dio.
+
+    Platform: Android Only
+
+
+7. Development Process: Phases & Tasks
+
+Phase 0: Foundation & Planning (Sprint 0)
+
+    Tasks:
+
+        [Design] Create detailed UI mockups and prototypes for Phase 1 screens.
+
+        [Design] Finalize color palette, typography, and icon set.
+
+        [Dev] Set up Flutter project structure, configure for Android only.
+
+        [Dev] Set up Supabase project (DB schema for users, entries, moods), enable Auth, configure RLS.
+
+        [Dev] Integrate base Flutter packages (Riverpod, GoRouter, http/dio, local DB).
+
+        [Dev] Establish basic CI/CD pipeline.
+
+        [PM] Refine feature list and task breakdown for Phase 1.
+
+Phase 1: Foundational Features (Sprints 1-4)
+
+    Sprint 1: Authentication & Basic Structure
+
+        [Design] Finalize Auth screen designs.
+
+        [Backend] Implement Supabase Auth (Email/Password).
+
+        [Frontend] Build Login, Sign Up screens & logic.
+
+        [Frontend] Set up basic app navigation (Bottom Nav Bar, GoRouter).
+
+        [Frontend] Implement state management for auth status.
+
+        [QA] Test authentication flow.
+
+    Sprint 2: Journaling & Mood Tracking Core
+
+        [Design] Finalize Journal entry creation/viewing and Mood tracking UI.
+
+        [Backend] Define & implement Supabase tables for journal_entries and mood_logs with RLS.
+
+        [Frontend] Build "New Entry" screen (text input, mood selection).
+
+        [Frontend] Implement saving entries and moods to Supabase.
+
+        [Frontend] Build Journal Feed screen (list entries).
+
+        [Frontend] Build Mood Calendar view (basic display).
+
+        [QA] Test CRUD operations for entries and mood logging.
+
+    Sprint 3: Offline & Basic AI
+
+        [Design] Design offline indicators/sync status UI.
+
+        [Frontend] Implement local caching (drift/sqflite) for entries and moods.
+
+        [Frontend] Implement basic sync logic.
+
+        [Backend/Frontend] Integrate Gemini 2.0 Flash API for sentiment analysis; secure API key handling.
+
+        [Frontend] Display sentiment tag on journal entries.
+
+        [Frontend] Implement static daily prompts feature.
+
+        [QA] Test offline functionality, sync logic, sentiment analysis.
+
+    Sprint 4: Settings, Foundation Polish & Testing
+
+        [Design] Finalize Settings screen design.
+
+        [Frontend] Build Settings screen (Account info, Logout).
+
+        [Frontend] Apply consistent styling across the app.
+
+        [Frontend] Implement core error handling and loading states.
+
+        [Dev] Add Crashlytics and basic Analytics.
+
+        [QA] Full regression testing of Phase 1 features, performance testing.
+
+Phase 2: Advanced Features & AI Integration (Sprints 5-8)
+
+(Tasks distributed across sprints based on priority and dependencies)
+
+    [Dev] Implement AI Smart Summaries logic and UI display (using Gemini 2.0 Flash).
+
+    [Dev] Develop AI Personalized Insights generation and presentation (using Gemini 2.0 Flash).
+
+    [Backend] Configure Supabase Storage, implement security rules for media.
+
+    [Frontend] Implement photo/voice note upload/download/display features in entries.
+
+    [Frontend] Build advanced mood visualization components (line charts, bar graphs).
+
+    [Dev] Implement Habit Tracker module (UI, data model, backend logic).
+
+    [Dev] Enhance offline sync reliability and conflict resolution.
+
+
+
+    [QA] Thoroughly test each new feature and integration.
+
+8. Deployment Strategy (Android)
+
+    Platform: Google Play Store.
+
+    Testing Tracks:
+
+        Internal Testing: Continuous deployment for the development team.
+
+        Closed Beta: Invite-only testing with a small group of target users.
+
+        Open Beta: Public testing track available via the Play Store.
+
+    Release: Phased rollout to production.
