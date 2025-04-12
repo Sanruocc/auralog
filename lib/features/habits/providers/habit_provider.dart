@@ -1,74 +1,130 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import '../../../core/database/database.dart' as db;
+import '../../../core/database/sqlite_helper.dart';
 import '../models/habit_item.dart';
 import '../../../core/utils/logger.dart';
 
+// Create a provider for the SQLite helper to ensure it's initialized only once
+final sqliteHelperProvider = Provider<SQLiteHelper>((ref) {
+  final sqliteHelper = SQLiteHelper();
+  ref.onDispose(() {
+    Logger.d('Provider', 'Closing SQLite connection');
+    sqliteHelper.close();
+  });
+  return sqliteHelper;
+});
 
 final habitProvider =
     StateNotifierProvider<HabitNotifier, AsyncValue<List<HabitItem>>>((ref) {
+  // Get the SQLite helper from the provider
+  final sqliteHelper = ref.watch(sqliteHelperProvider);
+  
   return HabitNotifier(
     supabase: Supabase.instance.client,
-    database: db.AppDatabase(),
+    sqliteHelper: sqliteHelper,
   );
 });
 
 class HabitNotifier extends StateNotifier<AsyncValue<List<HabitItem>>> {
   final SupabaseClient supabase;
-  final db.AppDatabase database;
+  final SQLiteHelper sqliteHelper;
   final _uuid = const Uuid();
 
   HabitNotifier({
     required this.supabase,
-    required this.database,
+    required this.sqliteHelper,
   }) : super(const AsyncValue.loading()) {
     _initialize();
   }
 
   Future<void> _initialize() async {
     try {
-      final habits = await database.getAllHabits();
-      state = AsyncValue.data(habits.map((h) => HabitItem.fromJson(h.toJson())).toList());
-      _syncHabits();
+      Logger.d('HabitNotifier', 'Initializing habit provider');
+      
+      // Get habits
+      try {
+        Logger.d('HabitNotifier', 'Loading habits from database');
+        final habits = await sqliteHelper.getAllHabitItems();
+        Logger.d('HabitNotifier', 'Loaded ${habits.length} habits');
+        state = AsyncValue.data(habits);
+      } catch (dbError, dbSt) {
+        Logger.e('HabitNotifier', 'Error loading habits from database: $dbError');
+        // Set empty list as fallback
+        state = const AsyncValue.data([]);
+      }
+
+      // Try to sync habits but don't fail if it doesn't work
+      try {
+        Logger.d('HabitNotifier', 'Syncing habits with server');
+        await _syncHabits();
+      } catch (syncError) {
+        Logger.e('HabitNotifier', 'Error syncing habits: $syncError');
+        // Continue with initialization even if sync fails
+      }
+
+      Logger.d('HabitNotifier', 'Habit provider initialization complete');
     } catch (e, st) {
+      Logger.e('HabitNotifier', 'Fatal error during habit provider initialization: $e');
       state = AsyncValue.error(e, st);
     }
   }
 
   Future<void> _syncHabits() async {
     try {
-      final unsyncedHabits = await database.getUnsyncedHabits();
+      // Get unsynced habits from database
+      final unsyncedHabits = await sqliteHelper.getUnsyncedHabitItems();
+
+      // Sync each habit to Supabase
       for (final habit in unsyncedHabits) {
-        await supabase.from('habits').upsert(habit.toJson());
-        await database.updateHabit(habit.copyWith(isSynced: true));
+        await supabase.from('habits').upsert({
+          'id': habit.id,
+          'user_id': habit.userId,
+          'title': habit.title,
+          'description': habit.description,
+          'is_completed': habit.isCompleted,
+          'created_at': habit.createdAt.toIso8601String(),
+          'target_date': habit.targetDate?.toIso8601String(),
+          'frequency': habit.frequency,
+        });
+
+        // Update the habit in the database to mark as synced
+        final updatedHabit = habit.copyWith(isSynced: true);
+        await sqliteHelper.updateHabitItem(updatedHabit);
       }
 
+      // Get habits from server
       final serverHabits = await supabase
           .from('habits')
           .select()
           .order('created_at', ascending: false);
 
+      // Process each server habit
       for (final habitData in serverHabits) {
-        final modelHabit = HabitItem.fromJson(habitData);
-        await database.insertHabit(db.HabitItem(
-          id: modelHabit.id,
-          userId: modelHabit.userId,
-          title: modelHabit.title,
-          description: modelHabit.description,
-          isCompleted: modelHabit.isCompleted,
-          createdAt: modelHabit.createdAt,
-          targetDate: modelHabit.targetDate,
-          frequency: modelHabit.frequency,
-          isSynced: modelHabit.isSynced,
-        ));
+        final habit = HabitItem(
+          id: habitData['id'],
+          userId: habitData['user_id'],
+          title: habitData['title'],
+          description: habitData['description'],
+          isCompleted: habitData['is_completed'] ?? false,
+          createdAt: DateTime.parse(habitData['created_at']),
+          targetDate: habitData['target_date'] != null
+              ? DateTime.parse(habitData['target_date'])
+              : null,
+          frequency: habitData['frequency'] ?? 1,
+          isSynced: true,
+        );
+
+        // Insert the habit into the database
+        await sqliteHelper.insertHabitItem(habit);
       }
 
-      final allHabits = await database.getAllHabits();
-      state = AsyncValue.data(allHabits.map((h) => HabitItem.fromJson(h.toJson())).toList());
+      // Refresh state with latest habits
+      final habits = await sqliteHelper.getAllHabitItems();
+      state = AsyncValue.data(habits);
     } catch (e) {
       // Don't update state on sync error, just log it
-      Logger.e('HabitProvider', 'Sync error: $e');
+      Logger.e('HabitNotifier', 'Sync error: $e');
     }
   }
 
@@ -93,20 +149,12 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<HabitItem>>> {
         isSynced: false,
       );
 
-      await database.insertHabit(db.HabitItem(
-        id: habit.id,
-        userId: habit.userId,
-        title: habit.title,
-        description: habit.description,
-        isCompleted: habit.isCompleted,
-        createdAt: habit.createdAt,
-        targetDate: habit.targetDate,
-        frequency: habit.frequency,
-        isSynced: habit.isSynced,
-      ));
+      // Insert habit into database
+      await sqliteHelper.insertHabitItem(habit);
 
-      final habits = await database.getAllHabits();
-      state = AsyncValue.data(habits.map((h) => HabitItem.fromJson(h.toJson())).toList());
+      // Get all habits and update state
+      final habits = await sqliteHelper.getAllHabitItems();
+      state = AsyncValue.data(habits);
 
       // Try to sync immediately
       _syncHabits();
@@ -117,21 +165,25 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<HabitItem>>> {
 
   Future<void> toggleHabit(String id) async {
     try {
-      final habits = await database.getAllHabits();
+      // Get all habits to find the one to toggle
+      final habits = await sqliteHelper.getAllHabitItems();
       final habit = habits.firstWhere(
         (h) => h.id == id,
         orElse: () => throw Exception('Habit not found'),
       );
 
+      // Toggle completion status
       final updatedHabit = habit.copyWith(
         isCompleted: !habit.isCompleted,
         isSynced: false,
       );
 
-      await database.updateHabit(updatedHabit);
+      // Update habit in database
+      await sqliteHelper.updateHabitItem(updatedHabit);
 
-      final updatedHabits = await database.getAllHabits();
-      state = AsyncValue.data(updatedHabits.map((h) => HabitItem.fromJson(h.toJson())).toList());
+      // Get all habits and update state
+      final updatedHabits = await sqliteHelper.getAllHabitItems();
+      state = AsyncValue.data(updatedHabits);
 
       // Try to sync immediately
       _syncHabits();
@@ -142,11 +194,15 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<HabitItem>>> {
 
   Future<void> deleteHabit(String id) async {
     try {
-      await database.deleteHabit(id);
+      // Delete from database
+      await sqliteHelper.deleteHabitItem(id);
+
+      // Delete from Supabase
       await supabase.from('habits').delete().eq('id', id);
 
-      final habits = await database.getAllHabits();
-      state = AsyncValue.data(habits.map((h) => HabitItem.fromJson(h.toJson())).toList());
+      // Get all habits and update state
+      final habits = await sqliteHelper.getAllHabitItems();
+      state = AsyncValue.data(habits);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
@@ -155,8 +211,7 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<HabitItem>>> {
   // Get habits due today
   Future<List<HabitItem>> getDueHabits() async {
     try {
-      final allHabitsDb = await database.getAllHabits();
-      final allHabits = allHabitsDb.map((h) => HabitItem.fromJson(h.toJson())).toList();
+      final allHabits = await sqliteHelper.getAllHabitItems();
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
 
@@ -193,9 +248,8 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<HabitItem>>> {
         return false;
       }).toList();
     } catch (e) {
-      Logger.e('HabitProvider', 'Error getting due habits: $e');
+      Logger.e('HabitNotifier', 'Error getting due habits: $e');
       return [];
     }
   }
-
 }

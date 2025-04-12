@@ -1,78 +1,33 @@
 import 'dart:io';
-import 'package:drift/drift.dart' hide Column;
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import '../../../core/database/database.dart' as db;
+import '../../../core/database/sqlite_helper.dart';
 import '../../../core/services/ai_service.dart';
 import '../../../core/services/storage_service.dart';
 import '../../../core/utils/logger.dart';
 import '../models/journal_entry.dart';
 
-// Helper methods to convert between database and domain models
-List<JournalEntry> convertDbEntriesToDomain(List<db.JournalEntry> dbEntries,
-    Map<String, List<db.Attachment>> attachmentsMap) {
-  return dbEntries.map((dbEntry) {
-    // Convert the entry
-    final domainEntry = JournalEntry(
-      id: dbEntry.id,
-      userId: dbEntry.userId,
-      content: dbEntry.content,
-      createdAt: dbEntry.createdAt,
-      mood: dbEntry.mood,
-      sentiment: dbEntry.sentiment,
-      isSynced: dbEntry.isSynced,
-      summary: dbEntry.summary,
-      // Convert attachments if any
-      attachments: (attachmentsMap[dbEntry.id] ?? []).map((dbAttachment) {
-        return Attachment(
-          id: dbAttachment.id,
-          entryId: dbAttachment.entryId,
-          type: dbAttachment.type,
-          url: dbAttachment.url,
-          createdAt: dbAttachment.createdAt,
-          isSynced: dbAttachment.isSynced,
-        );
-      }).toList(),
-    );
-    return domainEntry;
-  }).toList();
-}
-
-// Convert a domain JournalEntry to a database JournalEntry
-db.JournalEntriesCompanion createDbEntryCompanion(JournalEntry entry) {
-  return db.JournalEntriesCompanion.insert(
-    id: entry.id,
-    userId: entry.userId,
-    content: entry.content,
-    createdAt: entry.createdAt,
-    mood: entry.mood,
-    sentiment:
-        entry.sentiment != null ? Value(entry.sentiment) : const Value.absent(),
-    isSynced: Value(entry.isSynced),
-    summary:
-        entry.summary != null ? Value(entry.summary!) : const Value.absent(),
-  );
-}
-
-// Convert a domain Attachment to a database Attachment
-db.AttachmentsCompanion createDbAttachmentCompanion(Attachment attachment) {
-  return db.AttachmentsCompanion.insert(
-    id: attachment.id,
-    entryId: attachment.entryId,
-    type: attachment.type,
-    url: attachment.url,
-    createdAt: attachment.createdAt,
-    isSynced: Value(attachment.isSynced),
-  );
-}
+// Create a provider for the SQLite helper to ensure it's initialized only once
+final sqliteHelperProvider = Provider<SQLiteHelper>((ref) {
+  final sqliteHelper = SQLiteHelper();
+  ref.onDispose(() {
+    Logger.d('Provider', 'Closing SQLite connection');
+    sqliteHelper.close();
+  });
+  return sqliteHelper;
+});
 
 final journalProvider =
     StateNotifierProvider<JournalNotifier, AsyncValue<List<JournalEntry>>>(
         (ref) {
+  // Get the SQLite helper from the provider
+  final sqliteHelper = ref.watch(sqliteHelperProvider);
+  
   return JournalNotifier(
     supabase: Supabase.instance.client,
-    database: db.AppDatabase(),
+    sqliteHelper: sqliteHelper,
     aiService: AIService(),
     storageService: StorageService(),
   );
@@ -80,14 +35,14 @@ final journalProvider =
 
 class JournalNotifier extends StateNotifier<AsyncValue<List<JournalEntry>>> {
   final SupabaseClient supabase;
-  final db.AppDatabase database;
+  final SQLiteHelper sqliteHelper;
   final AIService aiService;
   final StorageService storageService;
   final _uuid = const Uuid();
 
   JournalNotifier({
     required this.supabase,
-    required this.database,
+    required this.sqliteHelper,
     required this.aiService,
     required this.storageService,
   }) : super(const AsyncValue.loading()) {
@@ -96,22 +51,54 @@ class JournalNotifier extends StateNotifier<AsyncValue<List<JournalEntry>>> {
 
   Future<void> _initialize() async {
     try {
-      // Get entries with attachments (already in domain model format)
-      final entries = await database.getAllEntries();
-      state = AsyncValue.data(entries);
-      _syncEntries();
+      Logger.d('JournalNotifier', 'Initializing journal provider');
+      
+      // Get entries with attachments
+      try {
+        Logger.d('JournalNotifier', 'Loading journal entries from database');
+        final entries = await sqliteHelper.getAllJournalEntries();
+        Logger.d('JournalNotifier', 'Loaded ${entries.length} journal entries');
+        state = AsyncValue.data(entries);
+      } catch (dbError, dbSt) {
+        Logger.e(
+            'JournalNotifier', 'Error loading entries from database: $dbError');
+        debugPrintStack(stackTrace: dbSt);
+        // Set empty list as fallback
+        state = const AsyncValue.data([]);
+      }
+
+      // Try to sync entries but don't fail if it doesn't work
+      try {
+        Logger.d('JournalNotifier', 'Syncing entries with server');
+        await _syncEntries();
+      } catch (syncError) {
+        Logger.e('JournalNotifier', 'Error syncing entries: $syncError');
+        // Continue with initialization even if sync fails
+      }
 
       // Initialize storage bucket if needed
-      await storageService.initStorage();
+      try {
+        Logger.d('JournalNotifier', 'Initializing storage bucket');
+        await storageService.initStorage();
+      } catch (storageError) {
+        Logger.e(
+            'JournalNotifier', 'Error initializing storage: $storageError');
+        // Continue with initialization even if storage init fails
+      }
+
+      Logger.d('JournalNotifier', 'Journal provider initialization complete');
     } catch (e, st) {
+      Logger.e('JournalNotifier',
+          'Fatal error during journal provider initialization: $e');
+      debugPrintStack(stackTrace: st);
       state = AsyncValue.error(e, st);
     }
   }
 
   Future<void> _syncEntries() async {
     try {
-      // Get unsynced entries from database (already in domain model format)
-      final unsyncedEntries = await database.getUnsyncedEntries();
+      // Get unsynced entries from database
+      final unsyncedEntries = await sqliteHelper.getUnsyncedJournalEntries();
 
       // Sync each entry to Supabase
       for (final entry in unsyncedEntries) {
@@ -124,11 +111,9 @@ class JournalNotifier extends StateNotifier<AsyncValue<List<JournalEntry>>> {
           }
         }
 
-        // Entry is already updated with isSynced = true in the previous step
-
         // Update the entry in the database to mark as synced
         final updatedEntry = entry.copyWith(isSynced: true);
-        await database.updateEntry(updatedEntry);
+        await sqliteHelper.updateJournalEntry(updatedEntry);
       }
 
       // Get entries from server
@@ -151,38 +136,18 @@ class JournalNotifier extends StateNotifier<AsyncValue<List<JournalEntry>>> {
         final attachments =
             attachmentsData.map((data) => Attachment.fromJson(data)).toList();
 
-        // Domain entry is used directly with the updated database methods
+        // Create a complete entry with attachments
+        final completeEntry = domainEntry.copyWith(
+          attachments: attachments,
+          isSynced: true,
+        );
 
         // Insert the entry into the database
-        await database.insertEntry(domainEntry);
-
-        // Insert attachments
-        for (final attachment in attachments) {
-          final dbAttachment = db.Attachment(
-            id: attachment.id,
-            entryId: attachment.entryId,
-            type: attachment.type,
-            url: attachment.url,
-            createdAt: attachment.createdAt,
-            isSynced: attachment.isSynced,
-          );
-
-          // Insert attachment using the database's insert method
-          await database.into(database.attachments).insert(
-                db.AttachmentsCompanion.insert(
-                  id: dbAttachment.id,
-                  entryId: dbAttachment.entryId,
-                  type: dbAttachment.type,
-                  url: dbAttachment.url,
-                  createdAt: dbAttachment.createdAt,
-                  isSynced: Value(dbAttachment.isSynced),
-                ),
-              );
-        }
+        await sqliteHelper.insertJournalEntry(completeEntry);
       }
 
       // Refresh state with latest entries
-      final entries = await database.getAllEntries();
+      final entries = await sqliteHelper.getAllJournalEntries();
       state = AsyncValue.data(entries);
     } catch (e) {
       // Don't update state on sync error, just log it
@@ -286,36 +251,11 @@ class JournalNotifier extends StateNotifier<AsyncValue<List<JournalEntry>>> {
         isSynced: false,
       );
 
-      // Domain entry is used directly with the updated database methods
-
       // Insert entry into database
-      await database.insertEntry(domainEntry);
-
-      // Insert attachments
-      for (final attachment in attachments) {
-        final dbAttachment = db.Attachment(
-          id: attachment.id,
-          entryId: attachment.entryId,
-          type: attachment.type,
-          url: attachment.url,
-          createdAt: attachment.createdAt,
-          isSynced: attachment.isSynced,
-        );
-
-        await database.into(database.attachments).insert(
-              db.AttachmentsCompanion.insert(
-                id: dbAttachment.id,
-                entryId: dbAttachment.entryId,
-                type: dbAttachment.type,
-                url: dbAttachment.url,
-                createdAt: dbAttachment.createdAt,
-                isSynced: Value(dbAttachment.isSynced),
-              ),
-            );
-      }
+      await sqliteHelper.insertJournalEntry(domainEntry);
 
       // Get all entries and update state
-      final entries = await database.getAllEntries();
+      final entries = await sqliteHelper.getAllJournalEntries();
       state = AsyncValue.data(entries);
 
       // Try to sync immediately
@@ -327,8 +267,9 @@ class JournalNotifier extends StateNotifier<AsyncValue<List<JournalEntry>>> {
 
   Future<void> deleteEntry(String id) async {
     try {
-      // Get entry with attachments
-      final entry = (await database.getAllEntries()).firstWhere(
+      // Get all entries to find the one to delete
+      final entries = await sqliteHelper.getAllJournalEntries();
+      final entry = entries.firstWhere(
         (e) => e.id == id,
         orElse: () => throw Exception('Entry not found'),
       );
@@ -348,15 +289,16 @@ class JournalNotifier extends StateNotifier<AsyncValue<List<JournalEntry>>> {
         }
       }
 
-      await database.deleteEntry(id);
+      // Delete from database
+      await sqliteHelper.deleteJournalEntry(id);
 
       // Delete from Supabase
       await supabase.from('attachments').delete().eq('entry_id', id);
       await supabase.from('journal_entries').delete().eq('id', id);
 
       // Get all entries and update state
-      final entries = await database.getAllEntries();
-      state = AsyncValue.data(entries);
+      final updatedEntries = await sqliteHelper.getAllJournalEntries();
+      state = AsyncValue.data(updatedEntries);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
@@ -367,7 +309,7 @@ class JournalNotifier extends StateNotifier<AsyncValue<List<JournalEntry>>> {
     required DateTime endDate,
   }) async {
     try {
-      final entries = await database.getAllEntries();
+      final entries = await sqliteHelper.getAllJournalEntries();
 
       // Filter entries by date
       final filteredEntries = entries.where((entry) {
@@ -487,11 +429,5 @@ class JournalNotifier extends StateNotifier<AsyncValue<List<JournalEntry>>> {
       Logger.e('JournalNotifier', 'Error generating prompt: $e');
       return "What's on your mind today?";
     }
-  }
-
-  @override
-  void dispose() {
-    database.close();
-    super.dispose();
   }
 }

@@ -38,11 +38,11 @@ dependencies:
   flutter_riverpod: ^2.4.9
   go_router: ^13.2.2
   http: ^1.1.0
-  
-  # Database - specific versions that work on both web and mobile
-  drift: ^2.12.0
+
+  # Database - using sqflite for direct SQLite access
+  sqflite: ^2.3.2
   sqlite3_flutter_libs: ^0.5.17
-  
+
   flutter_dotenv: ^5.1.0
   supabase_flutter: ^2.0.0
   flutter_secure_storage: ^9.0.0
@@ -55,6 +55,7 @@ dependencies:
   freezed_annotation: ^2.4.1
   json_annotation: ^4.8.1
   table_calendar: ^3.0.9
+  permission_handler: ^11.0.1
 
 dev_dependencies:
   flutter_test:
@@ -67,7 +68,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^2.0.0
 
-  drift_dev: ^2.12.0
+  # drift_dev removed
   build_runner: ^2.4.7
   riverpod_generator: ^2.3.9
   freezed: ^2.4.6
@@ -83,7 +84,7 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
-  
+
   assets:
     - .env
 
